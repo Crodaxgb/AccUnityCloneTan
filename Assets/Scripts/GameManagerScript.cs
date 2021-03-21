@@ -1,21 +1,45 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-
+using TMPro;
+using UnityEngine.SceneManagement;
+using System.Linq;
 public class GameManagerScript : MonoBehaviour
 {
+    public static GameManagerScript instance;
+    public TextMeshProUGUI livesText;
+    public GameObject gameOverMenu;
     public GameObject startingPoint, ballPrefab;
     public GameObject[] hitBoxes;
+    public GameObject ballUpgradePrefab, healthUpgradePrefab;
     private LineRenderer traceLine;
     private Camera cameraRef;
-    private float strechValue = 50, spawnProbability = 0.4f;
-    public float spawnBallInterval = 0.25f;
-    public float ballCount = 20;
-    private bool available = true;
-    private int spawnLocationCount = 17, iteratedBall = 0, roundCounter = 0;
     RaycastHit2D hit;
+    private List<GameObject> destroyQueue;
+
+    private float strechValue = 50, spawnProbability = 0.4f, upgradeProbability = 0.405f, healthUpgradeProbability = 0.410f;
+    public float spawnBallInterval = 0.25f, ballCount = 20;
+
+    private bool available = true, gameOver = false;
+
+    private int spawnLocationCount = 17, iteratedBall = 0, 
+        roundCounter = 0, levelHardness = 5, playerHealth =3, ballUpgrade = 0;
+
+    private void Awake()
+    {
+        if (instance != null && instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+        instance = this;
+    }
+
+
     void Start()
     {
+        SetLives();
+        destroyQueue = new List<GameObject>();
         //Get a reference to the line renderer
         traceLine = startingPoint.GetComponent<LineRenderer>();
         //Set its origin as the shooter object's position
@@ -29,6 +53,11 @@ public class GameManagerScript : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
+        //If the game is finished block the update
+        if(gameOver)
+        {
+            return;
+        }
         //If the turn is not ready to be played just return from this update
         if (!available)
         {
@@ -113,6 +142,7 @@ public class GameManagerScript : MonoBehaviour
             instantiatedBall.GetComponent<BallMovement>().SetVelocity(direction);
             yield return new WaitForSeconds(spawnBallInterval);
         }
+        
     }
     /// <summary>
     /// Spawns the blocks in randomized positions
@@ -122,11 +152,22 @@ public class GameManagerScript : MonoBehaviour
         //For each point evaluate a random probability
         for(int spawnIterator=0;  spawnIterator<spawnLocationCount; spawnIterator++)
         {
+            float probability = Random.Range(0.0f, 1.0f);
+            Vector3 spawnLocation = new Vector3(spawnIterator - 8.5f,4.5f,0);
             //If the probability is exceeds the randomized value spawn a block
-            if(Random.Range(0.0f, 1.0f)<spawnProbability)
+            if (probability < spawnProbability)
             {
-                Vector3 spawnLocation = new Vector3(spawnIterator - 8.5f,4.5f,0);
-                Instantiate(hitBoxes[Random.Range(0, hitBoxes.Length)], spawnLocation, Quaternion.identity);
+                GameObject block = Instantiate(hitBoxes[Random.Range(0, hitBoxes.Length)], spawnLocation, Quaternion.identity);
+                //Update the block's color according to its health
+                block.GetComponent<BlockHealth>().SetHealth(Random.Range(levelHardness, levelHardness * 2));
+            }
+            else if(probability < upgradeProbability)
+            {
+                GameObject block = Instantiate(ballUpgradePrefab, spawnLocation, Quaternion.identity);
+            }
+            else if (probability < healthUpgradeProbability)
+            {
+                GameObject block = Instantiate(healthUpgradePrefab, spawnLocation, Quaternion.identity);
             }
         }
 
@@ -158,20 +199,94 @@ public class GameManagerScript : MonoBehaviour
         //Set the availability to true
         available = true;
         //For each game object which has a 'Block' tag on the scene do the following
-        foreach(GameObject currentBlocks in GameObject.FindGameObjectsWithTag("Block"))
+        foreach(GameObject currentBlocks in GameObject.FindGameObjectsWithTag("Block").
+            Concat(GameObject.FindGameObjectsWithTag("HealthUpgrade")).
+            Concat(GameObject.FindGameObjectsWithTag("BallUpgrade")))
         {
             //Decrease their transform by a certain amount so they'll be displayer below their original positions
             currentBlocks.transform.position = 
                 new Vector3(currentBlocks.transform.position.x, currentBlocks.transform.position.y - 1 ,0);
+            if(currentBlocks.transform.position.y <= -4.5f)
+            {
+                destroyQueue.Add(currentBlocks);
+            }
         }
+
         //If the round is an order of five increase the spawn probability
         if(roundCounter % 5 == 0 && roundCounter > 0)
         {
+            levelHardness++;
             spawnProbability += 0.05f;
         }
+        //Check if the decrease health condition is met
+        CheckLifeCondition();
+        //Check if the player captured a ball upgrade
+        CheckBallUpgrade();
         //Spawn blocks
         SpawnBlocks();
         //Increase the round count
         roundCounter++;
+    }
+
+    /// <summary>
+    /// If the destroy list is not empty that means some blocks reached to the player.
+    /// This function destroys the blocks and decrease the health.
+    /// </summary>
+    private void CheckLifeCondition()
+    {
+        if(destroyQueue.Count > 0)
+        {
+            playerHealth--;
+            SetLives();
+
+            for(int destroyIndex=0; destroyIndex<destroyQueue.Count ; destroyIndex++)
+            {
+                Destroy(destroyQueue[destroyIndex], 0.05f);
+            }
+
+            //reset the list in any case
+            destroyQueue = new List<GameObject>();
+        }
+        if(playerHealth <= 0)
+        {
+            gameOverMenu.SetActive(true);
+            gameOver = true;
+        }
+    }
+
+    /// <summary>
+    /// Reload the scene when the replay button is pressed
+    /// </summary>
+    public void RestartGame()
+    {
+        SceneManager.LoadScene("SampleScene");
+    }
+
+    public void SetLives()
+    {
+        livesText.text = "Lives:" + playerHealth;
+    }
+
+    public void GetBallUpgrade()
+    {
+        ballUpgrade++;
+    }
+
+    public void GetHealthUpgrade()
+    {
+        playerHealth++;
+        SetLives();
+    }
+
+    /// <summary>
+    /// Increases the ball count at the end of the round
+    /// </summary>
+    public void CheckBallUpgrade()
+    {
+        if(ballUpgrade > 0)
+        {
+            ballCount += ballUpgrade;
+            ballUpgrade = 0;
+        }
     }
 }

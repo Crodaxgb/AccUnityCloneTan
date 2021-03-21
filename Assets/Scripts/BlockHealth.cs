@@ -39,5 +39,32 @@ public class BlockHealth : MonoBehaviour
         {
             Destroy(this.gameObject);
         }
+        else
+        {
+            SetColor();
+        }
+    }
+
+    public void SetHealth(int health)
+    {
+        this.health = health;
+        SetColor();
+    }
+
+    public void SetColor()
+    {
+
+        if (health <= 2)
+        {
+            GetComponent<SpriteRenderer>().color = new Color(255, 0, 0, 255) / 255;
+        }
+        else if (health <= 10)
+        {
+            GetComponent<SpriteRenderer>().color = new Color(10, 100, 200, 255) / 255;
+        }
+        else if (health < 20)
+        {
+            GetComponent<SpriteRenderer>().color = new Color(60, 20, 90, 255) / 255;
+        }
     }
 }

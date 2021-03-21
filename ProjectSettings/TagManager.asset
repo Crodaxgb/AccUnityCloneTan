@@ -6,6 +6,8 @@ TagManager:
   tags:
   - Block
   - Ball
+  - HealthUpgrade
+  - BallUpgrade
   layers:
   - Default
   - TransparentFX
